@@ -200,9 +200,9 @@ export function BridgePage() {
   const totalVisible = fleetGroups.operator.length + fleetGroups.primary.length + fleetGroups.external.length + fleetGroups.devtools.length + 1 /* Perplexity Computer static */
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full min-h-0">
       {/* Main Content */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 min-h-0 overflow-y-auto p-6">
 
         {/* Summary line */}
         <div className="mb-6">

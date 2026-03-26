@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+SERVICE="mission-control.service"
+
+echo "Restarting Mission Control..."
+systemctl --user restart "$SERVICE"
+sleep 2
+systemctl --user status --no-pager "$SERVICE" | sed -n '1,12p'

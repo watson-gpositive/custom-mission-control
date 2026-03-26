@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+SERVICE="mission-control.service"
+PROJECT_DIR="/home/yiannis/openclaw-mision-control"
+HEALTH_SCRIPT="$PROJECT_DIR/scripts/healthcheck.sh"
+
+echo "== Mission Control =="
+echo
+printf "Service: "
+systemctl --user is-active "$SERVICE" || true
+echo
+systemctl --user status --no-pager "$SERVICE" | sed -n '1,12p'
+echo
+printf "Health: "
+if [[ -x "$HEALTH_SCRIPT" ]]; then
+  "$HEALTH_SCRIPT" || true
+else
+  echo "healthcheck missing"
+fi

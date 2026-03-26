@@ -2,17 +2,17 @@ import { describe, it, expect } from 'vitest'
 import { THEMES, THEME_IDS, isThemeDark } from '../themes'
 
 describe('THEMES', () => {
-  it('has exactly one light theme', () => {
-    expect(THEMES).toHaveLength(1)
-    expect(THEMES[0]?.id).toBe('light')
-    expect(THEMES[0]?.group).toBe('light')
+  it('ships light and dark themes', () => {
+    expect(THEMES).toHaveLength(2)
+    expect(THEMES.map(theme => theme.id)).toEqual(['light', 'dark'])
+    expect(THEMES.map(theme => theme.group)).toEqual(['light', 'dark'])
   })
 
   it('each theme has required fields', () => {
     for (const theme of THEMES) {
       expect(theme.id).toBeTruthy()
       expect(theme.label).toBeTruthy()
-      expect(theme.group).toBe('light')
+      expect(['light', 'dark']).toContain(theme.group)
       expect(theme.swatch).toMatch(/^#[0-9A-Fa-f]{6}$/)
     }
   })
@@ -31,14 +31,15 @@ describe('THEME_IDS', () => {
     }
   })
 
-  it('contains only light', () => {
-    expect(THEME_IDS).toEqual(['light'])
+  it('contains light and dark', () => {
+    expect(THEME_IDS).toEqual(['light', 'dark'])
   })
 })
 
 describe('isThemeDark', () => {
-  it('always returns false for known and unknown IDs', () => {
+  it('correctly identifies dark themes', () => {
     expect(isThemeDark('light')).toBe(false)
+    expect(isThemeDark('dark')).toBe(true)
     expect(isThemeDark('unknown-theme')).toBe(false)
     expect(isThemeDark('')).toBe(false)
   })

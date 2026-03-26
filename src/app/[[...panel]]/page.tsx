@@ -3,6 +3,9 @@
 import { createElement, useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { OpsStrip } from '@/components/layout/ops-strip'
+import { HeaderBar } from '@/components/layout/header-bar'
+import { LiveFeed } from '@/components/layout/live-feed'
+import { NavRail } from '@/components/layout/nav-rail'
 import { BridgePage } from '@/components/pages/bridge-page'
 import { LabPage } from '@/components/pages/lab-page'
 import { OpenClawPage } from '@/components/pages/openclaw-page'
@@ -89,7 +92,7 @@ export default function Home() {
   const tb = useTranslations('boot')
   const tp = useTranslations('page')
   const tc = useTranslations('common')
-  const { activeTab, setActiveTab, setCurrentUser, setDashboardMode, setGatewayAvailable, setLocalSessionsAvailable, setCapabilitiesChecked, setSubscription, setDefaultOrgName, setUpdateAvailable, setOpenclawUpdate, showOnboarding, setShowOnboarding, showProjectManagerModal, setShowProjectManagerModal, fetchProjects, setChatPanelOpen, bootComplete, setBootComplete, setAgents, setSessions, setProjects, setInterfaceMode, setMemoryGraphAgents, setSkillsData, setActivities, setTasks } = useMissionControl()
+  const { activeTab, setActiveTab, setCurrentUser, setDashboardMode, setGatewayAvailable, setLocalSessionsAvailable, setCapabilitiesChecked, setSubscription, setDefaultOrgName, setUpdateAvailable, setOpenclawUpdate, showOnboarding, setShowOnboarding, showProjectManagerModal, setShowProjectManagerModal, fetchProjects, setChatPanelOpen, bootComplete, setBootComplete, setAgents, setSessions, setProjects, setInterfaceMode, setMemoryGraphAgents, setSkillsData, setActivities, setTasks, liveFeedOpen } = useMissionControl()
 
   // Sync URL → Zustand activeTab
   const pathname = usePathname()
@@ -391,7 +394,6 @@ export default function Home() {
         {tc('skipToMainContent')}
       </a>
 
-      {/* Top: Ops Strip (replaces HeaderBar + NavRail) */}
       {!showOnboarding && (
         <>
           <OpsStrip />
@@ -402,17 +404,26 @@ export default function Home() {
         </>
       )}
 
-      {/* Main content area */}
-      <main
-        id="main-content"
-        className={`flex-1 overflow-hidden ${showOnboarding ? 'pointer-events-none select-none blur-[2px] opacity-30' : ''}`}
-        role="main"
-        aria-hidden={showOnboarding}
-      >
-        <ErrorBoundary key={activeTab}>
-          <ContentRouter tab={activeTab} />
-        </ErrorBoundary>
-      </main>
+      <div className={`flex-1 min-h-0 flex ${showOnboarding ? 'pointer-events-none select-none blur-[2px] opacity-30' : ''}`}>
+        {!showOnboarding && <NavRail />}
+
+        <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
+          {!showOnboarding && <HeaderBar />}
+
+          <main
+            id="main-content"
+            className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden"
+            role="main"
+            aria-hidden={showOnboarding}
+          >
+            <ErrorBoundary key={activeTab}>
+              <ContentRouter tab={activeTab} />
+            </ErrorBoundary>
+          </main>
+        </div>
+
+        {!showOnboarding && liveFeedOpen && <LiveFeed />}
+      </div>
 
       {/* Chat panel overlay */}
       {!showOnboarding && <ChatPanel />}

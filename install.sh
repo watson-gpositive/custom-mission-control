@@ -238,6 +238,7 @@ deploy_local() {
   ok "Dependencies installed"
 
   info "Building Mission Control..."
+  pnpm rebuild better-sqlite3 || true
   pnpm build
   ok "Build complete"
 
@@ -246,8 +247,27 @@ deploy_local() {
     setup_systemd
   fi
 
+  info "Stopping any existing Mission Control process on port $MC_PORT..."
+  if command_exists lsof; then
+    local existing_pids
+    existing_pids="$(lsof -tiTCP:"$MC_PORT" -sTCP:LISTEN 2>/dev/null || true)"
+    if [[ -n "$existing_pids" ]]; then
+      echo "$existing_pids" | xargs -r kill || true
+    fi
+  else
+    fuser -k "$MC_PORT"/tcp 2>/dev/null || true
+  fi
+  if [[ -f "$INSTALL_DIR/.data/mc.pid" ]]; then
+    local old_pid
+    old_pid="$(cat "$INSTALL_DIR/.data/mc.pid" 2>/dev/null || true)"
+    if [[ -n "$old_pid" ]] && kill -0 "$old_pid" 2>/dev/null; then
+      kill "$old_pid" 2>/dev/null || true
+    fi
+    rm -f "$INSTALL_DIR/.data/mc.pid"
+  fi
+
   info "Starting Mission Control..."
-  PORT="$MC_PORT" nohup pnpm start > "$INSTALL_DIR/.data/mc.log" 2>&1 &
+  PORT="$MC_PORT" HOSTNAME="0.0.0.0" nohup bash scripts/start-standalone.sh > "$INSTALL_DIR/.data/mc.log" 2>&1 &
   local pid=$!
   echo "$pid" > "$INSTALL_DIR/.data/mc.pid"
 
