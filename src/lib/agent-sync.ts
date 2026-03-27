@@ -13,6 +13,7 @@ import { existsSync, readFileSync, statSync } from 'fs'
 import { resolveWithin } from './paths'
 import { logger } from './logger'
 import { parseJsonRelaxed } from './json-relaxed'
+import { getAllGatewaySessions } from './sessions'
 
 interface OpenClawAgent {
   id: string
@@ -226,6 +227,27 @@ function mapAgentToMC(agent: OpenClawAgent): {
 }
 
 /** Sync agents from openclaw.json into the MC database */
+function resolveAgentSessionKey(agentName: string, configData: any): string | null {
+  const sessions = getAllGatewaySessions(24 * 60 * 60 * 1000, true)
+  const openclawId = typeof configData?.openclawId === 'string' ? configData.openclawId.trim().toLowerCase() : ''
+  const normalizedName = agentName.trim().toLowerCase()
+
+  const candidates = sessions
+    .filter((session) => {
+      const sessionAgent = String(session.agent || '').trim().toLowerCase()
+      return sessionAgent === normalizedName || (openclawId && sessionAgent === openclawId)
+    })
+    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+
+  if (candidates.length === 0) return null
+
+  const preferred = candidates.find((session) => session.key.endsWith(':main'))
+    || candidates.find((session) => session.chatType === 'channel')
+    || candidates[0]
+
+  return preferred?.key || null
+}
+
 export async function syncAgentsFromConfig(actor: string = 'system'): Promise<SyncResult> {
   let agents: OpenClawAgent[]
   try {
@@ -244,39 +266,42 @@ export async function syncAgentsFromConfig(actor: string = 'system'): Promise<Sy
   let updated = 0
   const results: SyncResult['agents'] = []
 
-  const findByName = db.prepare('SELECT id, name, role, config, soul_content FROM agents WHERE name = ?')
+  const findByName = db.prepare('SELECT id, name, role, config, soul_content, session_key FROM agents WHERE name = ?')
   const insertAgent = db.prepare(`
-    INSERT INTO agents (name, role, soul_content, status, created_at, updated_at, config)
-    VALUES (?, ?, ?, 'offline', ?, ?, ?)
+    INSERT INTO agents (name, role, soul_content, status, created_at, updated_at, config, session_key)
+    VALUES (?, ?, ?, 'offline', ?, ?, ?, ?)
   `)
   const updateAgent = db.prepare(`
-    UPDATE agents SET role = ?, config = ?, soul_content = ?, updated_at = ? WHERE name = ?
+    UPDATE agents SET role = ?, config = ?, soul_content = ?, session_key = ?, updated_at = ? WHERE name = ?
   `)
 
   db.transaction(() => {
     for (const agent of agents) {
       const mapped = mapAgentToMC(agent)
       const configJson = JSON.stringify(mapped.config)
+      const sessionKey = resolveAgentSessionKey(mapped.name, mapped.config)
       const existing = findByName.get(mapped.name) as any
 
       if (existing) {
         // Check if config or soul_content actually changed
         const existingConfig = existing.config || '{}'
         const existingSoul = existing.soul_content || null
+        const existingSessionKey = existing.session_key || null
         const configChanged = existingConfig !== configJson || existing.role !== mapped.role
         const soulChanged = mapped.soul_content !== null && mapped.soul_content !== existingSoul
+        const sessionChanged = existingSessionKey !== sessionKey
 
-        if (configChanged || soulChanged) {
+        if (configChanged || soulChanged || sessionChanged) {
           // Only overwrite soul_content if we read a new value from workspace
           const soulToWrite = mapped.soul_content ?? existingSoul
-          updateAgent.run(mapped.role, configJson, soulToWrite, now, mapped.name)
+          updateAgent.run(mapped.role, configJson, soulToWrite, sessionKey, now, mapped.name)
           results.push({ id: agent.id, name: mapped.name, action: 'updated' })
           updated++
         } else {
           results.push({ id: agent.id, name: mapped.name, action: 'unchanged' })
         }
       } else {
-        insertAgent.run(mapped.name, mapped.role, mapped.soul_content, now, now, configJson)
+        insertAgent.run(mapped.name, mapped.role, mapped.soul_content, now, now, configJson, sessionKey)
         results.push({ id: agent.id, name: mapped.name, action: 'created' })
         created++
       }

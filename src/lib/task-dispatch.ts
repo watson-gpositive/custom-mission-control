@@ -16,6 +16,7 @@ interface DispatchableTask {
   agent_name: string
   agent_id: number
   agent_config: string | null
+  agent_session_key: string | null
   ticket_prefix: string | null
   project_ticket_no: number | null
   project_id: number | null
@@ -87,6 +88,17 @@ function resolveGatewayAgentId(task: DispatchableTask): string {
     } catch { /* ignore */ }
   }
   return task.agent_name
+}
+
+function buildLiveSessionTaskPrompt(task: DispatchableTask, rejectionFeedback?: string | null): string {
+  const basePrompt = buildTaskPrompt(task, rejectionFeedback)
+  return [
+    basePrompt,
+    '',
+    'You are receiving this inside your existing live runtime/session.',
+    'Immediately acknowledge pickup, begin work, and write concise progress updates back into Mission Control where practical.',
+    `Mission Control task id: ${task.id}`,
+  ].join('\n')
 }
 
 function buildTaskPrompt(task: DispatchableTask, rejectionFeedback?: string | null): string {
@@ -415,7 +427,7 @@ export async function runAegisReviews(): Promise<{ ok: boolean; message: string 
           id: task.id, title: task.title, description: task.description,
           status: 'quality_review', priority: 'high', assigned_to: 'aegis',
           workspace_id: task.workspace_id, agent_name: 'aegis', agent_id: 0,
-          agent_config: null, ticket_prefix: task.ticket_prefix,
+          agent_config: null, agent_session_key: null, ticket_prefix: task.ticket_prefix,
           project_ticket_no: task.project_ticket_no, project_id: null,
         }
         agentResponse = await callClaudeDirectly(reviewTask, prompt)
@@ -626,6 +638,7 @@ export async function dispatchAssignedTasks(): Promise<{ ok: boolean; message: s
 
   const tasks = db.prepare(`
     SELECT t.*, a.name as agent_name, a.id as agent_id, a.config as agent_config,
+           a.session_key as agent_session_key,
            p.ticket_prefix, t.project_ticket_no
     FROM tasks t
     JOIN agents a ON a.name = t.assigned_to AND a.workspace_id = t.workspace_id
@@ -682,8 +695,6 @@ export async function dispatchAssignedTasks(): Promise<{ ok: boolean; message: s
       `).get(task.id) as { content: string } | undefined
       const rejectionFeedback = rejectionRow?.content?.replace(/^Quality Review Rejected:\n?/, '') || null
 
-      const prompt = buildTaskPrompt(task, rejectionFeedback)
-
       // Check if task has a target session specified in metadata
       const taskMeta = (() => {
         try {
@@ -694,20 +705,24 @@ export async function dispatchAssignedTasks(): Promise<{ ok: boolean; message: s
       const targetSession: string | null = typeof taskMeta?.target_session === 'string' && taskMeta.target_session
         ? taskMeta.target_session
         : null
+      const liveSessionKey = targetSession || task.agent_session_key || null
+      const prompt = liveSessionKey
+        ? buildLiveSessionTaskPrompt(task, rejectionFeedback)
+        : buildTaskPrompt(task, rejectionFeedback)
 
       let agentResponse: AgentResponseParsed
       const useDirectApi = !isGatewayAvailable() && getAnthropicApiKey()
 
-      if (useDirectApi && !targetSession) {
+      if (useDirectApi && !liveSessionKey) {
         // Direct Claude API dispatch — no gateway needed
         agentResponse = await callClaudeDirectly(task, prompt)
-      } else if (targetSession) {
-        // Dispatch to a specific existing session via chat.send
-        logger.info({ taskId: task.id, targetSession, agent: task.agent_name }, 'Dispatching task to targeted session')
+      } else if (liveSessionKey) {
+        // Dispatch into a specific existing runtime/session and leave the task in_progress.
+        logger.info({ taskId: task.id, liveSessionKey, agent: task.agent_name }, 'Dispatching task to live session')
         const sendResult = await callOpenClawGateway<any>(
           'chat.send',
           {
-            sessionKey: targetSession,
+            sessionKey: liveSessionKey,
             message: prompt,
             idempotencyKey: `task-dispatch-${task.id}-${Date.now()}`,
             deliver: false,
@@ -716,13 +731,59 @@ export async function dispatchAssignedTasks(): Promise<{ ok: boolean; message: s
         )
         const status = String(sendResult?.status || '').toLowerCase()
         if (status !== 'started' && status !== 'ok' && status !== 'in_flight') {
-          throw new Error(`chat.send to session ${targetSession} returned status: ${status}`)
+          throw new Error(`chat.send to session ${liveSessionKey} returned status: ${status}`)
         }
-        // chat.send is fire-and-forget; we record the session but won't get inline response text
-        agentResponse = {
-          text: `Task dispatched to existing session ${targetSession}. The agent will process it within that session context.`,
-          sessionId: sendResult?.runId || targetSession,
+
+        const nowTs = Math.floor(Date.now() / 1000)
+        const mergedMeta = {
+          ...(taskMeta && typeof taskMeta === 'object' ? taskMeta : {}),
+          dispatch_session_id: liveSessionKey,
+          runtime_delivery: {
+            mode: targetSession ? 'target_session' : 'agent_session',
+            session_key: liveSessionKey,
+            run_id: sendResult?.runId || null,
+            status: status || 'started',
+            delivered_at: nowTs,
+            delivered_by: 'scheduler',
+          },
         }
+
+        db.prepare(`
+          UPDATE tasks SET metadata = ?, updated_at = ? WHERE id = ?
+        `).run(JSON.stringify(mergedMeta), nowTs, task.id)
+
+        db.prepare(`
+          INSERT INTO comments (task_id, author, content, created_at, workspace_id)
+          VALUES (?, ?, ?, ?, ?)
+        `).run(
+          task.id,
+          'scheduler',
+          `Dispatched to live session ${liveSessionKey}${sendResult?.runId ? ` (run ${sendResult.runId})` : ''}. Task remains in progress until Watson reports back.`,
+          nowTs,
+          task.workspace_id,
+        )
+
+        eventBus.broadcast('task.updated', {
+          id: task.id,
+          status: 'in_progress',
+          assigned_to: task.assigned_to,
+          dispatch_session_id: liveSessionKey,
+          runtime_delivery: mergedMeta.runtime_delivery,
+        })
+
+        db_helpers.logActivity(
+          'task_runtime_dispatched',
+          'task',
+          task.id,
+          'scheduler',
+          `Delivered task "${task.title}" into live session ${liveSessionKey}`,
+          { session_key: liveSessionKey, run_id: sendResult?.runId || null, mode: targetSession ? 'target_session' : 'agent_session' },
+          task.workspace_id
+        )
+
+        results.push({ id: task.id, success: true })
+        logger.info({ taskId: task.id, agent: task.agent_name, liveSessionKey }, 'Task handed off to live session')
+        continue
       } else {
         // Step 1: Invoke via gateway (new session)
         const gatewayAgentId = resolveGatewayAgentId(task)

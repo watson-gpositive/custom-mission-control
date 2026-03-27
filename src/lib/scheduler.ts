@@ -12,6 +12,7 @@ import { syncSkillsFromDisk } from './skill-sync'
 import { syncLocalAgents } from './local-agent-sync'
 import { dispatchAssignedTasks, runAegisReviews, requeueStaleTasks, autoRouteInboxTasks } from './task-dispatch'
 import { spawnRecurringTasks } from './recurring-tasks'
+import { startMarkdownTaskWatcher, syncMarkdownTasks } from './markdown-task-sync'
 
 const BACKUP_DIR = join(dirname(config.dbPath), 'backups')
 
@@ -284,6 +285,19 @@ export function initScheduler() {
     logger.warn({ err }, 'Agent auto-sync failed')
   })
 
+  // Initial markdown task sync + file watcher
+  try {
+    const result = syncMarkdownTasks(true)
+    logger.info({ result }, 'Initial markdown task sync complete')
+  } catch (err) {
+    logger.warn({ err }, 'Initial markdown task sync failed')
+  }
+  try {
+    startMarkdownTaskWatcher()
+  } catch (err) {
+    logger.warn({ err }, 'Markdown task watcher startup failed')
+  }
+
   // Register tasks
   const now = Date.now()
   // Stagger the initial runs: backup at ~3 AM, cleanup at ~4 AM (relative to process start)
@@ -340,6 +354,15 @@ export function initScheduler() {
     intervalMs: TICK_MS, // Every 60s — lightweight file stat checks
     lastRun: null,
     nextRun: now + 10_000, // First scan 10s after startup
+    enabled: true,
+    running: false,
+  })
+
+  tasks.set('markdown_task_sync', {
+    name: 'Markdown Task Sync',
+    intervalMs: TICK_MS,
+    lastRun: null,
+    nextRun: now + 12_000,
     enabled: true,
     running: false,
   })
@@ -427,6 +450,7 @@ async function tick() {
       : id === 'webhook_retry' ? 'webhooks.retry_enabled'
       : id === 'claude_session_scan' ? 'general.claude_session_scan'
       : id === 'skill_sync' ? 'general.skill_sync'
+      : id === 'markdown_task_sync' ? 'general.markdown_task_sync'
       : id === 'local_agent_sync' ? 'general.local_agent_sync'
       : id === 'gateway_agent_sync' ? 'general.gateway_agent_sync'
       : id === 'task_dispatch' ? 'general.task_dispatch'
@@ -434,7 +458,7 @@ async function tick() {
       : id === 'recurring_task_spawn' ? 'general.recurring_task_spawn'
       : id === 'stale_task_requeue' ? 'general.stale_task_requeue'
       : 'general.agent_heartbeat'
-    const defaultEnabled = id === 'agent_heartbeat' || id === 'webhook_retry' || id === 'claude_session_scan' || id === 'skill_sync' || id === 'local_agent_sync' || id === 'gateway_agent_sync' || id === 'task_dispatch' || id === 'aegis_review' || id === 'recurring_task_spawn' || id === 'stale_task_requeue'
+    const defaultEnabled = id === 'agent_heartbeat' || id === 'webhook_retry' || id === 'claude_session_scan' || id === 'skill_sync' || id === 'markdown_task_sync' || id === 'local_agent_sync' || id === 'gateway_agent_sync' || id === 'task_dispatch' || id === 'aegis_review' || id === 'recurring_task_spawn' || id === 'stale_task_requeue'
     if (!isSettingEnabled(settingKey, defaultEnabled)) continue
 
     task.running = true
@@ -444,6 +468,7 @@ async function tick() {
         : id === 'webhook_retry' ? await processWebhookRetries()
         : id === 'claude_session_scan' ? await syncClaudeSessions()
         : id === 'skill_sync' ? await syncSkillsFromDisk()
+        : id === 'markdown_task_sync' ? await syncMarkdownTasks()
         : id === 'local_agent_sync' ? await syncLocalAgents()
         : id === 'gateway_agent_sync' ? await syncAgentsFromConfig('scheduled').then(async r => {
             const refreshed = await syncAgentLiveStatuses()
@@ -487,6 +512,7 @@ export function getSchedulerStatus() {
       : id === 'webhook_retry' ? 'webhooks.retry_enabled'
       : id === 'claude_session_scan' ? 'general.claude_session_scan'
       : id === 'skill_sync' ? 'general.skill_sync'
+      : id === 'markdown_task_sync' ? 'general.markdown_task_sync'
       : id === 'local_agent_sync' ? 'general.local_agent_sync'
       : id === 'gateway_agent_sync' ? 'general.gateway_agent_sync'
       : id === 'task_dispatch' ? 'general.task_dispatch'
@@ -494,7 +520,7 @@ export function getSchedulerStatus() {
       : id === 'recurring_task_spawn' ? 'general.recurring_task_spawn'
       : id === 'stale_task_requeue' ? 'general.stale_task_requeue'
       : 'general.agent_heartbeat'
-    const defaultEnabled = id === 'agent_heartbeat' || id === 'webhook_retry' || id === 'claude_session_scan' || id === 'skill_sync' || id === 'local_agent_sync' || id === 'gateway_agent_sync' || id === 'task_dispatch' || id === 'aegis_review' || id === 'recurring_task_spawn' || id === 'stale_task_requeue'
+    const defaultEnabled = id === 'agent_heartbeat' || id === 'webhook_retry' || id === 'claude_session_scan' || id === 'skill_sync' || id === 'markdown_task_sync' || id === 'local_agent_sync' || id === 'gateway_agent_sync' || id === 'task_dispatch' || id === 'aegis_review' || id === 'recurring_task_spawn' || id === 'stale_task_requeue'
     result.push({
       id,
       name: task.name,
@@ -517,6 +543,7 @@ export async function triggerTask(taskId: string): Promise<{ ok: boolean; messag
   if (taskId === 'webhook_retry') return processWebhookRetries()
   if (taskId === 'claude_session_scan') return syncClaudeSessions()
   if (taskId === 'skill_sync') return syncSkillsFromDisk()
+  if (taskId === 'markdown_task_sync') return syncMarkdownTasks(true)
   if (taskId === 'local_agent_sync') return syncLocalAgents()
   if (taskId === 'gateway_agent_sync') return syncAgentsFromConfig('manual').then(r => ({ ok: true, message: `Gateway sync: ${r.created} created, ${r.updated} updated, ${r.synced} total` }))
   if (taskId === 'task_dispatch') return autoRouteInboxTasks().then(async (r) => { const d = await dispatchAssignedTasks(); return { ok: r.ok && d.ok, message: [r.message, d.message].filter(m => m && !m.includes('No ')).join(' | ') || 'No tasks' } })
