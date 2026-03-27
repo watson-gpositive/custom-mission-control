@@ -746,6 +746,7 @@
     "colInProgress": "In Progress",
     "colReview": "Review",
     "colQualityReview": "Quality Review",
+    "colFailed": "Failed",
     "colDone": "Done",
     "recurring": "RECURRING",
     "spawned": "SPAWNED",

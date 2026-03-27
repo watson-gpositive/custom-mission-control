@@ -22,7 +22,7 @@ interface Task {
   id: number
   title: string
   description?: string
-  status: 'inbox' | 'assigned' | 'in_progress' | 'review' | 'quality_review' | 'done' | 'awaiting_owner'
+  status: 'inbox' | 'assigned' | 'in_progress' | 'review' | 'quality_review' | 'done' | 'awaiting_owner' | 'failed'
   priority: 'low' | 'medium' | 'high' | 'critical' | 'urgent'
   assigned_to?: string
   created_by: string
@@ -93,6 +93,7 @@ const STATUS_COLUMN_KEYS = [
   { key: 'in_progress', titleKey: 'colInProgress', color: 'bg-yellow-500/20 text-yellow-400' },
   { key: 'review', titleKey: 'colReview', color: 'bg-purple-500/20 text-purple-400' },
   { key: 'quality_review', titleKey: 'colQualityReview', color: 'bg-indigo-500/20 text-indigo-400' },
+  { key: 'failed', titleKey: 'colFailed', color: 'bg-red-500/20 text-red-400' },
   { key: 'done', titleKey: 'colDone', color: 'bg-green-500/20 text-green-400' },
 ]
 
@@ -1842,6 +1843,7 @@ function ClaudeCodeTasksSection() {
     s === 'completed' ? 'text-green-400' :
     s === 'in_progress' ? 'text-blue-400' :
     s === 'blocked' ? 'text-red-400' :
+    s === 'failed' ? 'text-red-400' :
     s === 'awaiting_owner' ? 'text-orange-400' :
     'text-muted-foreground'
 
