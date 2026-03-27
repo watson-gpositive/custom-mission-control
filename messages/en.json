@@ -762,6 +762,7 @@
     "collapse": "Collapse",
     "expand": "Expand",
     "loading": "Loading...",
+    "loadingTasks": "Loading tasks...",
     "noTeamTasksFound": "No team tasks found",
     "noTeamTasksDesc": "No Claude Code team tasks are currently active.",
     "taskCount": "{count, plural, one {# task} other {# tasks}}",
