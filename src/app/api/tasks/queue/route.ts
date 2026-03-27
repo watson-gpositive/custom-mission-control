@@ -112,8 +112,8 @@ export async function GET(request: NextRequest) {
       WHERE id = (
         SELECT id FROM tasks
         WHERE workspace_id = ?
-          AND status IN ('assigned', 'inbox')
-          AND (assigned_to IS NULL OR assigned_to = ?)
+          AND status = 'assigned'
+          AND assigned_to = ?
         ORDER BY ${priorityRankSql()} ASC, due_date ASC NULLS LAST, created_at ASC
         LIMIT 1
       )
