@@ -835,10 +835,14 @@ export async function dispatchAssignedTasks(): Promise<{ ok: boolean; message: s
         existingMeta.dispatch_session_id = agentResponse.sessionId
       }
 
-      // Update task: status → review, set outcome
+      existingMeta.output_summary = typeof existingMeta.output_summary === 'string' && existingMeta.output_summary.trim()
+        ? existingMeta.output_summary
+        : 'Agent completed the requested work and returned the execution summary in the resolution field.'
+
+      // Update task: status → done, set outcome and completion notes
       db.prepare(`
-        UPDATE tasks SET status = ?, outcome = ?, resolution = ?, metadata = ?, updated_at = ? WHERE id = ?
-      `).run('review', 'success', truncated, JSON.stringify(existingMeta), Math.floor(Date.now() / 1000), task.id)
+        UPDATE tasks SET status = ?, outcome = ?, resolution = ?, metadata = ?, completed_at = ?, updated_at = ? WHERE id = ?
+      `).run('done', 'success', truncated, JSON.stringify(existingMeta), Math.floor(Date.now() / 1000), Math.floor(Date.now() / 1000), task.id)
 
       // Add a comment from the agent with the full response
       db.prepare(`
@@ -854,13 +858,13 @@ export async function dispatchAssignedTasks(): Promise<{ ok: boolean; message: s
 
       eventBus.broadcast('task.status_changed', {
         id: task.id,
-        status: 'review',
+        status: 'done',
         previous_status: 'in_progress',
       })
 
       eventBus.broadcast('task.updated', {
         id: task.id,
-        status: 'review',
+        status: 'done',
         outcome: 'success',
         assigned_to: task.assigned_to,
         dispatch_session_id: agentResponse.sessionId,
@@ -871,7 +875,7 @@ export async function dispatchAssignedTasks(): Promise<{ ok: boolean; message: s
         'task',
         task.id,
         task.agent_name,
-        `Agent completed task "${task.title}" — awaiting review`,
+        `Agent completed task "${task.title}"`,
         { response_length: agentResponse.text.length, dispatch_session_id: agentResponse.sessionId },
         task.workspace_id
       )

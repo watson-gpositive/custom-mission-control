@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { ZodSchema, ZodError } from 'zod'
 import { z } from 'zod'
+import { TASK_STATUS_VALUES } from './task-status'
 
 export async function validateBody<T>(
   request: Request,
@@ -29,12 +30,14 @@ export async function validateBody<T>(
 const taskMetadataSchema = z.object({
   implementation_repo: z.string().min(1, 'implementation_repo cannot be empty').max(200).optional(),
   code_location: z.string().min(1, 'code_location cannot be empty').max(500).optional(),
+  output_summary: z.string().min(1, 'output_summary cannot be empty').max(5000).optional(),
+  failure_note: z.string().min(1, 'failure_note cannot be empty').max(5000).optional(),
 }).catchall(z.unknown())
 
 export const createTaskSchema = z.object({
   title: z.string().min(1, 'Title is required').max(500),
   description: z.string().max(5000).optional(),
-  status: z.enum(['inbox', 'assigned', 'in_progress', 'review', 'quality_review', 'done', 'failed']).default('inbox'),
+  status: z.enum(TASK_STATUS_VALUES).default('inbox'),
   priority: z.enum(['critical', 'high', 'medium', 'low']).default('medium'),
   project_id: z.number().int().positive().optional(),
   assigned_to: z.string().max(100).optional(),
@@ -73,7 +76,7 @@ export const createAgentSchema = z.object({
 export const bulkUpdateTaskStatusSchema = z.object({
   tasks: z.array(z.object({
     id: z.number().int().positive(),
-    status: z.enum(['inbox', 'assigned', 'in_progress', 'review', 'quality_review', 'done', 'failed']),
+    status: z.enum(TASK_STATUS_VALUES),
   })).min(1, 'At least one task is required').max(100),
 })
 

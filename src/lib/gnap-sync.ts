@@ -20,8 +20,6 @@ const MC_TO_GNAP_STATUS: Record<string, string> = {
   assigned: 'ready',
   ready: 'ready',
   in_progress: 'in_progress',
-  review: 'review',
-  quality_review: 'review',
   completed: 'done',
   done: 'done',
   blocked: 'blocked',
@@ -31,8 +29,8 @@ const MC_TO_GNAP_STATUS: Record<string, string> = {
 const GNAP_TO_MC_STATUS: Record<string, string> = {
   backlog: 'inbox',
   ready: 'assigned',
+  review: 'assigned',
   in_progress: 'in_progress',
-  review: 'review',
   done: 'done',
   blocked: 'blocked',
   cancelled: 'cancelled',

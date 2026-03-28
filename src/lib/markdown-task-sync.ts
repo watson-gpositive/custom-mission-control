@@ -66,12 +66,8 @@ function inferAssignedTo(text: string): string | null {
   return null
 }
 
-function inferStatus(item: ParsedItem, assignedTo: string | null): 'inbox' | 'assigned' | 'in_progress' | 'review' | 'quality_review' | 'done' | 'awaiting_owner' {
+function inferStatus(item: ParsedItem, assignedTo: string | null): 'inbox' | 'assigned' | 'in_progress' | 'done' | 'failed' {
   if (item.done) return 'done'
-  const lower = item.text.toLowerCase()
-  if (lower.includes('waiting for') || lower.includes('awaiting owner') || lower.includes('approval') || lower.includes('manual action') || lower.includes('needs human')) {
-    return 'awaiting_owner'
-  }
   if (assignedTo) return 'assigned'
   return 'inbox'
 }

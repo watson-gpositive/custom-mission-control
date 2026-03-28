@@ -34,7 +34,7 @@ export function OpsStrip() {
   // Operational metrics — what matters to the operator
   const squadReady = agents.filter(a => a.status === 'idle' || a.status === 'busy').length
   const totalAgents = agents.length
-  const needsReview = tasks.filter(t => t.status === 'review' || t.status === 'quality_review').length
+  const needsReview = tasks.filter(t => t.status === 'failed').length
   const inFlight = tasks.filter(t => t.status === 'assigned' || t.status === 'in_progress').length
 
   // Command palette state

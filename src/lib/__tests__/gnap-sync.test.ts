@@ -31,7 +31,6 @@ describe('status mapping', () => {
     expect(mcStatusToGnap('inbox')).toBe('backlog')
     expect(mcStatusToGnap('in_progress')).toBe('in_progress')
     expect(mcStatusToGnap('done')).toBe('done')
-    expect(mcStatusToGnap('review')).toBe('review')
     expect(mcStatusToGnap('blocked')).toBe('blocked')
     expect(mcStatusToGnap('cancelled')).toBe('cancelled')
   })
@@ -40,7 +39,7 @@ describe('status mapping', () => {
     expect(gnapStatusToMc('backlog')).toBe('inbox')
     expect(gnapStatusToMc('in_progress')).toBe('in_progress')
     expect(gnapStatusToMc('done')).toBe('done')
-    expect(gnapStatusToMc('review')).toBe('review')
+    expect(gnapStatusToMc('review')).toBe('assigned')
   })
 
   it('falls back for unknown values', () => {

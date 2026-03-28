@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { API_KEY_HEADER, createTestTask, deleteTestTask } from './helpers'
+import { AGENT_API_KEY_HEADER, API_KEY_HEADER, createTestTask, deleteTestTask } from './helpers'
 
 test.describe('Tasks CRUD', () => {
   const cleanup: number[] = []
@@ -115,13 +115,13 @@ test.describe('Tasks CRUD', () => {
   })
 
   test('GET list filters by status', async ({ request }) => {
-    const { id } = await createTestTask(request, { status: 'review' })
+    const { id } = await createTestTask(request, { status: 'failed', error_message: 'obsolete task' })
     cleanup.push(id)
 
-    const res = await request.get('/api/tasks?status=review', { headers: API_KEY_HEADER })
+    const res = await request.get('/api/tasks?status=failed', { headers: API_KEY_HEADER })
     const body = await res.json()
     for (const t of body.tasks) {
-      expect(t.status).toBe('review')
+      expect(t.status).toBe('failed')
     }
   })
 
@@ -227,7 +227,7 @@ test.describe('Tasks CRUD', () => {
     expect(res.status()).toBe(200)
   })
 
-  test('PUT returns 403 when moving to done without Aegis approval', async ({ request }) => {
+  test('PUT returns 403 when moving inbox directly to done', async ({ request }) => {
     const { id } = await createTestTask(request)
     cleanup.push(id)
 
@@ -237,7 +237,38 @@ test.describe('Tasks CRUD', () => {
     })
     expect(res.status()).toBe(403)
     const body = await res.json()
-    expect(body.error).toContain('Aegis')
+    expect(body.error).toContain('Transition inbox -> done is not allowed')
+  })
+
+  test('PUT auto-assigns Watson when moving inbox to assigned without assignee', async ({ request }) => {
+    const { id } = await createTestTask(request)
+    cleanup.push(id)
+
+    const res = await request.put(`/api/tasks/${id}`, {
+      headers: API_KEY_HEADER,
+      data: { status: 'assigned' },
+    })
+    expect(res.status()).toBe(200)
+    const body = await res.json()
+    expect(body.task.status).toBe('assigned')
+    expect(body.task.assigned_to).toBe('Watson')
+  })
+
+  test('PUT blocks done without resolution and output summary', async ({ request }) => {
+    const { id } = await createTestTask(request, { status: 'assigned', assigned_to: 'Watson' })
+    cleanup.push(id)
+
+    const startRes = await request.put(`/api/tasks/${id}`, {
+      headers: AGENT_API_KEY_HEADER,
+      data: { status: 'in_progress' },
+    })
+    expect(startRes.status()).toBe(200)
+
+    const doneRes = await request.put(`/api/tasks/${id}`, {
+      headers: AGENT_API_KEY_HEADER,
+      data: { status: 'done', resolution: 'Implemented fix' },
+    })
+    expect(doneRes.status()).toBe(400)
   })
 
   // ── DELETE /api/tasks/[id] ───────────────────
@@ -270,8 +301,14 @@ test.describe('Tasks CRUD', () => {
     expect(readBody.task.description).toBe('lifecycle test')
 
     // Update
-    const updateRes = await request.put(`/api/tasks/${id}`, {
+    const assignRes = await request.put(`/api/tasks/${id}`, {
       headers: API_KEY_HEADER,
+      data: { status: 'assigned' },
+    })
+    expect(assignRes.status()).toBe(200)
+
+    const updateRes = await request.put(`/api/tasks/${id}`, {
+      headers: AGENT_API_KEY_HEADER,
       data: { status: 'in_progress', priority: 'critical' },
     })
     expect(updateRes.status()).toBe(200)

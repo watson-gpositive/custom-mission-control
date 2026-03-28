@@ -178,7 +178,7 @@ export function BridgePage() {
 
   // Items needing attention
   const needsAttention = useMemo(
-    () => tasks.filter(t => t.status === 'review' || t.status === 'quality_review'),
+    () => tasks.filter(t => t.status === 'failed'),
     [tasks]
   )
 
@@ -399,7 +399,7 @@ export function BridgePage() {
                 >
                   <p className="text-xs text-foreground font-medium truncate">{task.title}</p>
                   <p className="text-2xs text-muted-foreground mt-0.5">
-                    {task.assigned_to ? `From ${task.assigned_to}` : 'Unassigned'} &middot; {task.status === 'quality_review' ? 'QA Review' : 'Review'}
+                    {task.assigned_to ? `From ${task.assigned_to}` : 'Unassigned'} &middot; Failed
                   </p>
                 </button>
               ))}

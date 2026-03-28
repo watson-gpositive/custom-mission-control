@@ -5,6 +5,11 @@ export const API_KEY_HEADER: Record<string, string> = {
   'Content-Type': 'application/json',
 }
 
+export const AGENT_API_KEY_HEADER = {
+  ...API_KEY_HEADER,
+  'x-agent-name': 'Watson',
+}
+
 function uid() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }

@@ -22,7 +22,7 @@ interface Task {
   id: number
   title: string
   description?: string
-  status: 'inbox' | 'assigned' | 'in_progress' | 'review' | 'quality_review' | 'done' | 'awaiting_owner' | 'failed'
+  status: 'inbox' | 'assigned' | 'in_progress' | 'done' | 'failed'
   priority: 'low' | 'medium' | 'high' | 'critical' | 'urgent'
   assigned_to?: string
   created_by: string
@@ -89,27 +89,10 @@ interface MentionOption {
 const STATUS_COLUMN_KEYS = [
   { key: 'inbox', titleKey: 'colInbox', color: 'bg-secondary text-foreground' },
   { key: 'assigned', titleKey: 'colAssigned', color: 'bg-blue-500/20 text-blue-400' },
-  { key: 'awaiting_owner', titleKey: 'colAwaitingOwner', color: 'bg-orange-500/20 text-orange-400' },
   { key: 'in_progress', titleKey: 'colInProgress', color: 'bg-yellow-500/20 text-yellow-400' },
-  { key: 'review', titleKey: 'colReview', color: 'bg-purple-500/20 text-purple-400' },
-  { key: 'quality_review', titleKey: 'colQualityReview', color: 'bg-indigo-500/20 text-indigo-400' },
-  { key: 'failed', titleKey: 'colFailed', color: 'bg-red-500/20 text-red-400' },
   { key: 'done', titleKey: 'colDone', color: 'bg-green-500/20 text-green-400' },
+  { key: 'failed', titleKey: 'colFailed', color: 'bg-red-500/20 text-red-400' },
 ]
-
-const AWAITING_OWNER_KEYWORDS = [
-  'waiting for', 'waiting on', 'needs human', 'manual action',
-  'account creation', 'browser login', 'approval needed',
-  'owner action', 'human required', 'blocked on owner',
-  'awaiting owner', 'awaiting human', 'needs owner',
-]
-
-function detectAwaitingOwner(task: Task): boolean {
-  if (task.status === 'awaiting_owner') return true
-  if (task.status !== 'assigned' && task.status !== 'in_progress') return false
-  const text = `${task.title} ${task.description || ''}`.toLowerCase()
-  return AWAITING_OWNER_KEYWORDS.some(kw => text.includes(kw))
-}
 
 /** Build a human-readable label for a session key like "agent:nefes:telegram-group-123" */
 function formatSessionLabel(s: { key: string; channel?: string; kind?: string; label?: string }): string {
@@ -387,7 +370,7 @@ interface SpawnFormData {
 export function TaskBoardPanel() {
   const t = useTranslations('taskBoard')
   const statusColumns = STATUS_COLUMN_KEYS.map(col => ({ ...col, title: t(col.titleKey as any) }))
-  const { tasks: storeTasks, setTasks: storeSetTasks, selectedTask, setSelectedTask, activeProject, availableModels, spawnRequests, addSpawnRequest, updateSpawnRequest, dashboardMode } = useMissionControl()
+  const { tasks: storeTasks, setTasks: storeSetTasks, selectedTask, setSelectedTask, activeProject, availableModels, spawnRequests, addSpawnRequest, updateSpawnRequest, dashboardMode, currentUser } = useMissionControl()
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -551,12 +534,11 @@ export function TaskBoardPanel() {
   // Poll as SSE fallback — pauses when SSE is delivering events
   useSmartPoll(fetchData, 30000, { pauseWhenSseConnected: true })
 
-  // Group tasks by status, overriding for awaiting_owner detection
+  const taskBoardIsReadOnlyWorkflow = Boolean(currentUser)
+
+  // Group tasks by canonical workflow status
   const tasksByStatus = statusColumns.reduce((acc, column) => {
-    acc[column.key] = tasks.filter(task => {
-      const effectiveStatus = detectAwaitingOwner(task) ? 'awaiting_owner' : task.status
-      return effectiveStatus === column.key
-    })
+    acc[column.key] = tasks.filter(task => task.status === column.key)
     return acc
   }, {} as Record<string, Task[]>)
 
@@ -591,6 +573,12 @@ export function TaskBoardPanel() {
     dragCounter.current = 0
     e.currentTarget.classList.remove('drag-over')
 
+    if (taskBoardIsReadOnlyWorkflow) {
+      setDraggedTask(null)
+      setError('Use Reassign or Send back to Inbox from task details. Forward workflow moves are agent-only.')
+      return
+    }
+
     if (!draggedTask || draggedTask.status === newStatus) {
       setDraggedTask(null)
       return
@@ -599,18 +587,6 @@ export function TaskBoardPanel() {
     const previousStatus = draggedTask.status
 
     try {
-      if (newStatus === 'done') {
-        const reviewResponse = await fetch(`/api/quality-review?taskId=${draggedTask.id}`)
-        if (!reviewResponse.ok) {
-          throw new Error('Unable to verify Aegis approval')
-        }
-        const reviewData = await reviewResponse.json()
-        const latest = reviewData.reviews?.find((review: any) => review.reviewer === 'aegis')
-        if (!latest || latest.status !== 'approved') {
-          throw new Error('Aegis approval is required before moving to done')
-        }
-      }
-
       // Optimistically update via Zustand store
       updateTask(draggedTask.id, {
         status: newStatus as Task['status'],
@@ -952,7 +928,7 @@ export function TaskBoardPanel() {
               {tasksByStatus[column.key]?.map(task => (
                 <div
                   key={task.id}
-                  draggable
+                  draggable={!taskBoardIsReadOnlyWorkflow}
                   role="button"
                   tabIndex={0}
                   aria-label={`${task.title}, ${task.priority} priority, ${task.status}`}
@@ -1034,11 +1010,6 @@ export function TaskBoardPanel() {
                           {task.aegisApproved && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
                               Aegis
-                            </span>
-                          )}
-                          {detectAwaitingOwner(task) && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400 border border-orange-500/30 font-mono">
-                              {t('colAwaitingOwner')}
                             </span>
                           )}
                         </div>
@@ -2281,9 +2252,8 @@ function EditTaskModal({
                   <option value="inbox">{t('colInbox')}</option>
                   <option value="assigned">{t('colAssigned')}</option>
                   <option value="in_progress">{t('colInProgress')}</option>
-                  <option value="review">{t('colReview')}</option>
-                  <option value="quality_review">{t('colQualityReview')}</option>
                   <option value="done">{t('colDone')}</option>
+                  <option value="failed">{t('colFailed')}</option>
                 </select>
               </div>
 

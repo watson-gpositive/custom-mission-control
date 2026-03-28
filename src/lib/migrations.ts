@@ -1382,6 +1382,81 @@ const migrations: Migration[] = [
       db.exec(`CREATE INDEX IF NOT EXISTS idx_runs_run_hash ON runs(run_hash)`)
       db.exec(`CREATE INDEX IF NOT EXISTS idx_runs_task_id ON runs(task_id)`)
     }
+  },
+  {
+    id: '047_task_workflow_simplification',
+    up(db: Database.Database) {
+      const now = Math.floor(Date.now() / 1000)
+      const rows = db.prepare(`
+        SELECT id, status, assigned_to, resolution, error_message, metadata, workspace_id
+        FROM tasks
+      `).all() as Array<{
+        id: number
+        status: string
+        assigned_to: string | null
+        resolution: string | null
+        error_message: string | null
+        metadata: string | null
+        workspace_id: number
+      }>
+
+      const updateTask = db.prepare(`
+        UPDATE tasks
+        SET status = ?, assigned_to = ?, metadata = ?, updated_at = ?
+        WHERE id = ?
+      `)
+      const logActivity = db.prepare(`
+        INSERT INTO activities (type, entity_type, entity_id, actor, description, data, workspace_id, created_at)
+        VALUES (?, 'task', ?, 'system', ?, ?, ?, ?)
+      `)
+
+      for (const row of rows) {
+        const originalStatus = row.status
+        let nextStatus = row.status
+        let nextAssignedTo = row.assigned_to
+        let metadata: Record<string, any> = {}
+        try { metadata = row.metadata ? JSON.parse(row.metadata) : {} } catch { metadata = {} }
+        const migrationNotes: string[] = []
+
+        const hasResolution = typeof row.resolution === 'string' && row.resolution.trim().length > 0
+        const hasOutputSummary = [metadata.output_summary, metadata.outputSummary, metadata.result_summary, metadata.resultSummary]
+          .some((value) => typeof value === 'string' && value.trim())
+
+        if (row.status === 'awaiting_owner') {
+          nextStatus = 'inbox'
+          migrationNotes.push('awaiting_owner -> inbox')
+        } else if (row.status === 'review' || row.status === 'quality_review') {
+          nextStatus = hasResolution || hasOutputSummary ? 'done' : 'in_progress'
+          migrationNotes.push(`${row.status} -> ${nextStatus}`)
+        }
+
+        if (nextStatus === 'assigned' && !(nextAssignedTo || '').trim()) {
+          nextAssignedTo = 'Watson'
+          migrationNotes.push('assigned task defaulted to Watson')
+        }
+        if (nextStatus === 'in_progress' && !(nextAssignedTo || '').trim()) {
+          nextAssignedTo = 'Watson'
+          metadata.legacy_workflow_review_needed = true
+          migrationNotes.push('in_progress task defaulted to Watson and flagged for review')
+        }
+        if (nextStatus === 'done' && !hasOutputSummary) {
+          metadata.legacy_incomplete_completion = true
+          migrationNotes.push('done task marked legacy_incomplete_completion')
+        }
+
+        if (migrationNotes.length === 0) continue
+
+        updateTask.run(nextStatus, nextAssignedTo, JSON.stringify(metadata), now, row.id)
+        logActivity.run(
+          'task_workflow_migrated',
+          row.id,
+          `Workflow migration normalized task from ${originalStatus} to ${nextStatus}`,
+          JSON.stringify({ originalStatus, nextStatus, originalAssignedTo: row.assigned_to, nextAssignedTo, migrationNotes }),
+          row.workspace_id ?? 1,
+          now,
+        )
+      }
+    }
   }
 ]
 

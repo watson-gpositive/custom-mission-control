@@ -21,7 +21,7 @@ export function LabPage() {
   const navigateToPanel = useNavigateToPanel()
 
   const reviewTasks = useMemo(
-    () => tasks.filter(t => t.status === 'review' || t.status === 'quality_review')
+    () => tasks.filter(t => t.status === 'failed')
       .sort((a, b) => b.updated_at - a.updated_at),
     [tasks]
   )
@@ -195,7 +195,7 @@ const priorityColors: Record<string, string> = {
 
 function ReviewTaskRow({ task }: { task: Task }) {
   const timeStr = formatRelativeTime(task.updated_at * 1000)
-  const statusLabel = task.status === 'quality_review' ? 'QA Review' : 'Review'
+  const statusLabel = task.status === 'failed' ? 'Failed' : 'Attention'
 
   return (
     <div className="px-4 py-3 hover:bg-secondary/30 transition-colors">
