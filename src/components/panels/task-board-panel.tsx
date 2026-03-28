@@ -575,7 +575,7 @@ export function TaskBoardPanel() {
 
     if (taskBoardIsReadOnlyWorkflow) {
       setDraggedTask(null)
-      setError('Use Reassign or Send back to Inbox from task details. Forward workflow moves are agent-only.')
+      setError('Use Reassign or Send back to Backlog from task details. Forward workflow moves are agent-only.')
       return
     }
 

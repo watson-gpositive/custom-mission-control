@@ -9,7 +9,7 @@ export function TaskFlowWidget({ data }: { data: DashboardData }) {
     <div className="panel">
       <div className="panel-header"><h3 className="text-sm font-semibold">Task Flow</h3></div>
       <div className="panel-body grid grid-cols-2 gap-3">
-        <StatRow label="Inbox" value={inboxCount} />
+        <StatRow label="Backlog" value={inboxCount} />
         <StatRow label="Assigned" value={assignedCount} />
         <StatRow label="In Progress" value={runningTasks} />
         <StatRow label="Review" value={reviewCount} />

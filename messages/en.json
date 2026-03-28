@@ -741,7 +741,7 @@
     "taskBoard": "Task Board",
     "taskBoardAriaLabel": "Task Board",
     "columnAriaLabel": "{title} column, {count} tasks",
-    "colInbox": "Inbox",
+    "colInbox": "Backlog",
     "colAssigned": "Assigned",
     "colAwaitingOwner": "Awaiting Owner",
     "colInProgress": "In Progress",
