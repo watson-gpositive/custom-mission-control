@@ -522,7 +522,7 @@ function ModeBadge({
       </button>
 
       {showTooltip && (
-        <div className="absolute top-full left-0 mt-1.5 z-50 w-56 rounded-lg border border-border bg-card/95 backdrop-blur-md p-3 shadow-xl text-xs">
+        <div className="absolute top-full left-0 mt-1.5 z-[9999] w-56 rounded-lg border border-border bg-popover p-3 shadow-xl text-xs">
           <div className="font-medium text-foreground mb-2">{th('gatewayConnection')}</div>
           <div className="space-y-1.5 text-muted-foreground">
             <div className="flex justify-between">

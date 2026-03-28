@@ -431,8 +431,8 @@ export const TIER_META: Record<FleetTier, { label: string; description: string }
     description: 'Non-operational entries',
   },
   external: {
-    label: 'External Intelligence',
-    description: 'External platforms integrated into your operation',
+    label: 'External Agents',
+    description: 'External platforms with no local heartbeat',
   },
 }
 

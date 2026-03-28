@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useMissionControl, type Agent, type Activity, type CronJob, type JsonValue } from '@/store'
 import { useNavigateToPanel } from '@/lib/navigation'
 import {
@@ -127,10 +127,19 @@ function getLastRunAt(agent: Agent): string | null {
  *   3. What can I do with you? (quick action button)
  */
 export function BridgePage() {
-  const { agents, activities, tasks, cronJobs, sessions, connection } = useMissionControl()
+  const { agents, activities, tasks, cronJobs, sessions, connection, setCronJobs } = useMissionControl()
   const navigateToPanel = useNavigateToPanel()
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
   const [devToolsOpen, setDevToolsOpen] = useState(false)
+
+  // Load cron jobs on mount so the schedules table is populated
+  useEffect(() => {
+    if (cronJobs.length > 0) return // already loaded
+    fetch('/api/cron?action=list')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.jobs?.length) setCronJobs(d.jobs) })
+      .catch(() => {})
+  }, [])
 
   // Group agents by fleet tier, excluding hidden
   const fleetGroups = useMemo(() => {
@@ -275,38 +284,47 @@ export function BridgePage() {
               </div>
             )}
 
-            {/* ═══ EXTERNAL INTELLIGENCE — Perplexity Computer, etc. ═══ */}
+            {/* ═══ QUICK ACTIONS ═══ */}
             <div className="mb-8">
               <div className="mb-4 flex items-center gap-3">
                 <h2 className="font-heading text-lg font-semibold text-foreground">
-                  {TIER_META.external.label}
+                  Quick Actions
                 </h2>
-                <span className="text-xs text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">
-                  {TIER_META.external.description}
-                </span>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {/* Quick Actions — Watson shortcuts */}
-                <QuickActionsCard onNavigate={navigateToPanel} />
-                {/* Any external-tier agents from the store */}
-                {fleetGroups.external.map(agent => (
-                  <AgentBriefingCard
-                    key={agent.id}
-                    agent={agent}
-                    onClick={() => setSelectedAgent(selectedAgent?.id === agent.id ? null : agent)}
-                    isSelected={selectedAgent?.id === agent.id}
-                    onQuickAction={(target) => {
-                      if (target.startsWith('http')) {
-                        window.open(target, '_blank', 'noopener')
-                      } else {
-                        navigateToPanel(target)
-                      }
-                    }}
-                    recentActivities={activities}
-                  />
-                ))}
-              </div>
+              <QuickActionsCard onNavigate={navigateToPanel} />
             </div>
+
+            {/* ═══ EXTERNAL AGENTS — only show if any exist ═══ */}
+            {fleetGroups.external.length > 0 && (
+              <div className="mb-8">
+                <div className="mb-4 flex items-center gap-3">
+                  <h2 className="font-heading text-lg font-semibold text-foreground">
+                    {TIER_META.external.label}
+                  </h2>
+                  <span className="text-xs text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">
+                    {TIER_META.external.description}
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {fleetGroups.external.map(agent => (
+                    <AgentBriefingCard
+                      key={agent.id}
+                      agent={agent}
+                      onClick={() => setSelectedAgent(selectedAgent?.id === agent.id ? null : agent)}
+                      isSelected={selectedAgent?.id === agent.id}
+                      onQuickAction={(target) => {
+                        if (target.startsWith('http')) {
+                          window.open(target, '_blank', 'noopener')
+                        } else {
+                          navigateToPanel(target)
+                        }
+                      }}
+                      recentActivities={activities}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* ═══ DEV TOOLS — Local Claude Code Agents ═══ */}
             {fleetGroups.devtools.length > 0 && (
@@ -353,9 +371,14 @@ export function BridgePage() {
           </>
         )}
 
-        {/* Schedules Table — Full Operation Surface */}
+        {/* Schedules Table — Dynamic cron + static heartbeat */}
         <div className="mb-8">
-          <h2 className="font-heading text-lg font-semibold text-foreground mb-3">Full Operation Schedule</h2>
+          <h2 className="font-heading text-lg font-semibold text-foreground mb-3">Scheduled Operations</h2>
+          <p className="text-xs text-muted-foreground mb-3">
+            Active cron jobs from Mission Control and OpenClaw gateway heartbeat.
+            Create and manage schedules via the{' '}
+            <button onClick={() => navigateToPanel('cron')} className="text-primary hover:underline inline">Cron tab</button>.
+          </p>
           <div className="desk-panel overflow-hidden">
             <table className="w-full text-sm">
               <thead>
@@ -932,19 +955,19 @@ const QUICK_ACTIONS = [
 
 function QuickActionsCard({ onNavigate }: { onNavigate: (target: string) => void }) {
   return (
-    <div className="desk-panel border-l-4 border-l-primary transition-all duration-200 hover:shadow-lg">
+    <div className="desk-panel border-l-4 border-l-primary bg-card transition-all duration-200 hover:shadow-lg">
       <div className="p-4 pb-0">
         <div className="flex items-center gap-2 mb-3">
           <Zap className="w-4 h-4 text-primary" />
           <h3 className="text-sm font-semibold text-foreground">Quick Actions</h3>
         </div>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="flex flex-wrap gap-2">
           {QUICK_ACTIONS.map(action => (
             <Button
               key={action.target}
               variant="outline"
               size="sm"
-              className="text-xs h-8 px-2 bg-transparent hover:bg-primary/5 text-foreground border-border/50 hover:border-primary/50 justify-start"
+              className="text-xs h-7 px-2.5 bg-transparent hover:bg-primary/5 text-foreground border-border/50 hover:border-primary/50 justify-start whitespace-nowrap"
               onClick={() => onNavigate(action.target)}
             >
               <AgentIcon name={action.icon} className="w-3.5 h-3.5 mr-1.5 text-muted-foreground shrink-0" />
@@ -955,7 +978,7 @@ function QuickActionsCard({ onNavigate }: { onNavigate: (target: string) => void
       </div>
       <div className="px-4 pt-3 pb-4">
         <p className="text-2xs text-muted-foreground">
-          Shortcuts to common operator actions across Mission Control.
+          One-click shortcuts to common operator actions.
         </p>
       </div>
     </div>
