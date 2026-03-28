@@ -286,16 +286,20 @@ export function initScheduler() {
   })
 
   // Initial markdown task sync + file watcher
-  try {
-    const result = syncMarkdownTasks(true)
-    logger.info({ result }, 'Initial markdown task sync complete')
-  } catch (err) {
-    logger.warn({ err }, 'Initial markdown task sync failed')
-  }
-  try {
-    startMarkdownTaskWatcher()
-  } catch (err) {
-    logger.warn({ err }, 'Markdown task watcher startup failed')
+  if (isSettingEnabled('general.markdown_task_sync', false)) {
+    try {
+      const result = syncMarkdownTasks(true)
+      logger.info({ result }, 'Initial markdown task sync complete')
+    } catch (err) {
+      logger.warn({ err }, 'Initial markdown task sync failed')
+    }
+    try {
+      startMarkdownTaskWatcher()
+    } catch (err) {
+      logger.warn({ err }, 'Markdown task watcher startup failed')
+    }
+  } else {
+    logger.info('Markdown task sync disabled on startup')
   }
 
   // Register tasks
@@ -458,7 +462,7 @@ async function tick() {
       : id === 'recurring_task_spawn' ? 'general.recurring_task_spawn'
       : id === 'stale_task_requeue' ? 'general.stale_task_requeue'
       : 'general.agent_heartbeat'
-    const defaultEnabled = id === 'agent_heartbeat' || id === 'webhook_retry' || id === 'claude_session_scan' || id === 'skill_sync' || id === 'markdown_task_sync' || id === 'local_agent_sync' || id === 'gateway_agent_sync' || id === 'task_dispatch' || id === 'aegis_review' || id === 'recurring_task_spawn' || id === 'stale_task_requeue'
+    const defaultEnabled = id === 'agent_heartbeat' || id === 'webhook_retry' || id === 'claude_session_scan' || id === 'skill_sync' || id === 'local_agent_sync' || id === 'gateway_agent_sync' || id === 'task_dispatch' || id === 'aegis_review' || id === 'recurring_task_spawn' || id === 'stale_task_requeue'
     if (!isSettingEnabled(settingKey, defaultEnabled)) continue
 
     task.running = true
@@ -522,7 +526,7 @@ export function getSchedulerStatus() {
       : id === 'recurring_task_spawn' ? 'general.recurring_task_spawn'
       : id === 'stale_task_requeue' ? 'general.stale_task_requeue'
       : 'general.agent_heartbeat'
-    const defaultEnabled = id === 'agent_heartbeat' || id === 'webhook_retry' || id === 'claude_session_scan' || id === 'skill_sync' || id === 'markdown_task_sync' || id === 'local_agent_sync' || id === 'gateway_agent_sync' || id === 'task_dispatch' || id === 'aegis_review' || id === 'recurring_task_spawn' || id === 'stale_task_requeue'
+    const defaultEnabled = id === 'agent_heartbeat' || id === 'webhook_retry' || id === 'claude_session_scan' || id === 'skill_sync' || id === 'local_agent_sync' || id === 'gateway_agent_sync' || id === 'task_dispatch' || id === 'aegis_review' || id === 'recurring_task_spawn' || id === 'stale_task_requeue'
     result.push({
       id,
       name: task.name,
