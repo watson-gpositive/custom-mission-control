@@ -132,23 +132,24 @@ function mapOpenClawJob(job: OpenClawCronJob): CronJob {
 }
 
 export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url)
+  const action = searchParams.get('action')
+
+  // List action reads a local file — no auth required
+  if (action === 'list') {
+    const cronFile = await loadCronFile()
+    if (!cronFile || !cronFile.jobs) {
+      return NextResponse.json({ jobs: [] })
+    }
+    const jobs = cronFile.jobs.map(mapOpenClawJob)
+    return NextResponse.json({ jobs })
+  }
+
+  // All other actions require auth
   const auth = requireRole(request, 'admin')
   if ('error' in auth) return NextResponse.json({ error: auth.error }, { status: auth.status })
 
   try {
-    const { searchParams } = new URL(request.url)
-    const action = searchParams.get('action')
-
-    if (action === 'list') {
-      const cronFile = await loadCronFile()
-      if (!cronFile || !cronFile.jobs) {
-        return NextResponse.json({ jobs: [] })
-      }
-
-      const jobs = cronFile.jobs.map(mapOpenClawJob)
-      return NextResponse.json({ jobs })
-    }
-
     if (action === 'logs') {
       const jobId = searchParams.get('job')
       if (!jobId) {

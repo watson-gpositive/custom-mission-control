@@ -1,7 +1,7 @@
 import type { Task } from './db'
 import type { User } from './auth'
 
-export const TASK_STATUS_VALUES = ['inbox', 'assigned', 'in_progress', 'done', 'failed'] as const
+export const TASK_STATUS_VALUES = ['inbox', 'assigned', 'in_progress', 'human_review', 'done', 'failed'] as const
 export const LEGACY_TASK_STATUS_VALUES = ['awaiting_owner', 'review', 'quality_review'] as const
 export const ALL_TASK_STATUS_VALUES = [...TASK_STATUS_VALUES, ...LEGACY_TASK_STATUS_VALUES] as const
 
@@ -62,7 +62,8 @@ export function normalizeTaskUpdateStatus(args: {
 const ALLOWED_TRANSITIONS: Record<CanonicalTaskStatus, CanonicalTaskStatus[]> = {
   inbox: ['assigned', 'failed'],
   assigned: ['in_progress', 'inbox', 'failed'],
-  in_progress: ['done', 'failed', 'inbox'],
+  in_progress: ['human_review', 'done', 'failed', 'inbox'],
+  human_review: ['in_progress', 'done'],
   failed: ['inbox', 'assigned'],
   done: [],
 }
@@ -96,6 +97,10 @@ export function resolveAssigneeForStatusChange(args: {
   if (currentStatus === 'inbox' && nextStatus === 'assigned') {
     if (assignedToProvided) return requestedAssignedTo || DEFAULT_WORKFLOW_OWNER
     return currentAssignedTo || DEFAULT_WORKFLOW_OWNER
+  }
+
+  if (currentStatus === 'in_progress' && nextStatus === 'human_review') {
+    return 'Giannis'
   }
 
   if (assignedToProvided) return requestedAssignedTo || null

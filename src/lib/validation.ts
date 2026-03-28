@@ -34,6 +34,11 @@ const taskMetadataSchema = z.object({
   failure_note: z.string().min(1, 'failure_note cannot be empty').max(5000).optional(),
 }).catchall(z.unknown())
 
+const progressEntrySchema = z.object({
+  author: z.string().min(1, 'Progress author is required').max(100),
+  content: z.string().min(1, 'Progress content is required').max(10000),
+})
+
 export const createTaskSchema = z.object({
   title: z.string().min(1, 'Title is required').max(500),
   description: z.string().max(5000).optional(),
@@ -54,6 +59,10 @@ export const createTaskSchema = z.object({
   completed_at: z.number().int().min(0).max(4102444800).optional(),
   tags: z.array(z.string().min(1).max(100)).max(50).default([] as string[]),
   metadata: taskMetadataSchema.default({} as Record<string, unknown>),
+  progress_entry: z.object({
+    author: z.string().min(1).max(100),
+    content: z.string().min(1).max(5000),
+  }).optional(),
 })
 
 export const updateTaskSchema = createTaskSchema.partial()

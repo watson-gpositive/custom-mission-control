@@ -22,7 +22,7 @@ interface Task {
   id: number
   title: string
   description?: string
-  status: 'inbox' | 'assigned' | 'in_progress' | 'done' | 'failed'
+  status: 'inbox' | 'assigned' | 'in_progress' | 'human_review' | 'done' | 'failed'
   priority: 'low' | 'medium' | 'high' | 'critical' | 'urgent'
   assigned_to?: string
   created_by: string
@@ -90,6 +90,7 @@ const STATUS_COLUMN_KEYS = [
   { key: 'inbox', titleKey: 'colInbox', color: 'bg-secondary text-foreground' },
   { key: 'assigned', titleKey: 'colAssigned', color: 'bg-blue-500/20 text-blue-400' },
   { key: 'in_progress', titleKey: 'colInProgress', color: 'bg-yellow-500/20 text-yellow-400' },
+  { key: 'human_review', titleKey: 'colHumanReview', color: 'bg-purple-500/20 text-purple-400' },
   { key: 'done', titleKey: 'colDone', color: 'bg-green-500/20 text-green-400' },
   { key: 'failed', titleKey: 'colFailed', color: 'bg-red-500/20 text-red-400' },
 ]
@@ -143,6 +144,7 @@ const priorityColors: Record<string, string> = {
   medium: 'border-l-yellow-500',
   high: 'border-l-orange-500',
   critical: 'border-l-red-500',
+  human_review: 'border-l-purple-500',
 }
 
 function useMentionTargets() {
@@ -944,7 +946,7 @@ export function TaskBoardPanel() {
                       updateTaskUrl(task.id)
                     }
                   }}
-                  className={`group bg-card rounded-lg p-3 cursor-pointer border border-border/40 shadow-sm hover:shadow-md hover:shadow-black/10 hover:border-border/70 transition-all duration-200 ease-out border-l-4 ${priorityColors[task.priority]} ${
+                  className={`group bg-card rounded-lg p-3 cursor-pointer border border-border/40 shadow-sm hover:shadow-md hover:shadow-black/10 hover:border-border/70 transition-all duration-200 ease-out border-l-4 ${task.status === 'human_review' ? 'border-l-purple-500' : priorityColors[task.priority]} ${
                     draggedTask?.id === task.id ? 'opacity-40 scale-[0.97] rotate-1' : ''
                   } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background`}
                 >
@@ -1012,6 +1014,11 @@ export function TaskBoardPanel() {
                               Aegis
                             </span>
                           )}
+                          {task.status === 'human_review' && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30">
+                              Needs Review
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1022,6 +1029,24 @@ export function TaskBoardPanel() {
                       <MarkdownRenderer content={task.description} preview />
                     </div>
                   )}
+
+                  {/* Progress entry — latest note from agents */}
+                  {(() => {
+                    const progress = task.metadata?.current_progress
+                    const entries = Array.isArray(progress) ? progress : []
+                    const latest = entries.length > 0 ? entries[entries.length - 1] : null
+                    return (
+                      <div className={`ml-5.5 mt-1 text-xs line-clamp-2 ${task.status === 'failed' ? 'text-red-400/80' : latest ? 'text-muted-foreground/80' : 'text-muted-foreground/40 italic'}`}>
+                        {latest ? (
+                          <span>
+                            {task.status === 'failed' ? '🔴 ' : ''}{latest.content}
+                          </span>
+                        ) : (
+                          <span>Not started yet</span>
+                        )}
+                      </div>
+                    )
+                  })()}
 
                   {/* Footer: assignee, priority, timestamp */}
                   <div className="flex items-center justify-between gap-2 ml-5.5 mt-auto pt-2 border-t border-border/20">
@@ -1188,7 +1213,7 @@ function TaskDetailModal({
   const [reviewNotes, setReviewNotes] = useState('')
   const [reviewError, setReviewError] = useState<string | null>(null)
   const mentionTargets = useMentionTargets()
-  const [activeTab, setActiveTab] = useState<'details' | 'comments' | 'quality' | 'session'>('details')
+  const [activeTab, setActiveTab] = useState<'details' | 'comments' | 'quality' | 'session' | 'progress'>('details')
   const [reviewer, setReviewer] = useState('aegis')
 
   const fetchReviews = useCallback(async () => {
@@ -1292,6 +1317,60 @@ function TaskDetailModal({
       onUpdate()
     } catch (error) {
       setReviewError('Failed to submit review')
+    }
+  }
+
+  const [hrActionStatus, setHrActionStatus] = useState<string | null>(null)
+  const [hrActionError, setHrActionError] = useState<string | null>(null)
+
+  const handleRequestChanges = async () => {
+    if (!confirm('Move this task back to In Progress and reassign to Watson?')) return
+    setHrActionStatus('requesting')
+    setHrActionError(null)
+    try {
+      const res = await fetch(`/api/tasks/${task.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'in_progress',
+          assigned_to: 'Watson',
+          resolution: 'Giannis requested changes — task sent back to Watson for revision.',
+        }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to move task')
+      }
+      onUpdate()
+      onClose()
+    } catch (err) {
+      setHrActionError(err instanceof Error ? err.message : 'Failed to move task')
+      setHrActionStatus(null)
+    }
+  }
+
+  const handleApproveAndComplete = async () => {
+    if (!confirm('Approve and mark this task as Done?')) return
+    setHrActionStatus('approving')
+    setHrActionError(null)
+    try {
+      const res = await fetch(`/api/tasks/${task.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'done',
+          resolution: 'Approved by Giannis.',
+        }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to complete task')
+      }
+      onUpdate()
+      onClose()
+    } catch (err) {
+      setHrActionError(err instanceof Error ? err.message : 'Failed to complete task')
+      setHrActionStatus(null)
     }
   }
 
@@ -1402,6 +1481,31 @@ function TaskDetailModal({
               >
                 {t('delete')}
               </Button>
+              {task.status === 'human_review' && currentUser && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRequestChanges}
+                    disabled={hrActionStatus !== null}
+                    className="text-orange-400 border-orange-400/30 hover:bg-orange-500/10"
+                  >
+                    {hrActionStatus === 'requesting' ? 'Sending back...' : t('requestChanges')}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleApproveAndComplete}
+                    disabled={hrActionStatus !== null}
+                    className="text-green-400 border-green-400/30 hover:bg-green-500/10"
+                  >
+                    {hrActionStatus === 'approving' ? 'Completing...' : t('approveAndComplete')}
+                  </Button>
+                </div>
+              )}
+              {hrActionError && (
+                <span className="text-xs text-red-400">{hrActionError}</span>
+              )}
               <Button
                 variant="ghost"
                 size="icon-sm"
@@ -1421,7 +1525,7 @@ function TaskDetailModal({
             <p className="text-foreground/80 mb-4">{t('noDescription')}</p>
           )}
           <div className="flex gap-2 mt-4" role="tablist" aria-label={t('taskDetailTabs')}>
-            {(['details', 'comments', 'quality'] as const).map(tab => (
+            {(['details', 'comments', 'quality', 'progress'] as const).map(tab => (
               <Button
                 key={tab}
                 role="tab"
@@ -1431,7 +1535,7 @@ function TaskDetailModal({
                 aria-controls={`tabpanel-${tab}`}
                 onClick={() => setActiveTab(tab)}
               >
-                {tab === 'details' ? t('tabDetails') : tab === 'comments' ? t('tabComments') : t('tabQualityReview')}
+                {tab === 'details' ? t('tabDetails') : tab === 'comments' ? t('tabComments') : tab === 'quality' ? t('tabQualityReview') : t('tabProgress')}
               </Button>
             ))}
             {task.metadata?.dispatch_session_id && (
@@ -1696,8 +1800,160 @@ function TaskDetailModal({
               />
             </div>
           )}
+
+          {activeTab === 'progress' && (
+            <div id="tabpanel-progress" role="tabpanel" aria-label={t('tabProgress')} className="mt-6">
+              <ProgressSection task={task} currentUser={currentUser} onUpdate={onUpdate} />
+            </div>
+          )}
         </div>
       </div>
+    </div>
+  )
+}
+
+function ProgressSection({ task, currentUser, onUpdate }: { task: Task; currentUser?: any; onUpdate: () => void }) {
+  const t = useTranslations('taskBoard')
+  const [expanded, setExpanded] = useState<Record<number, boolean>>({})
+  const [progressText, setProgressText] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const author = currentUser?.username || 'Nexus'
+  const canWriteProgress = !currentUser && (task.status === 'in_progress' || task.status === 'human_review')
+  const entries = Array.isArray(task.metadata?.current_progress) ? task.metadata.current_progress : []
+
+  const formatTimestamp = (ts: number) => {
+    const diff = Date.now() - ts
+    const minutes = Math.floor(diff / 60000)
+    const hours = Math.floor(minutes / 60)
+    const days = Math.floor(hours / 24)
+    if (days > 0) return `${days}d ago`
+    if (hours > 0) return `${hours}h ago`
+    if (minutes > 0) return `${minutes}m ago`
+    return 'just now'
+  }
+
+  const handleSubmitProgress = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!progressText.trim() || isSubmitting) return
+    setIsSubmitting(true)
+    setSubmitError(null)
+    try {
+      const res = await fetch(`/api/tasks/${task.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ progress_entry: { author, content: progressText.trim() } }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to update progress')
+      }
+      setProgressText('')
+      onUpdate()
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Failed to update progress')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  if (entries.length === 0 && !canWriteProgress) {
+    return (
+      <div className="text-sm text-muted-foreground/50 italic py-4 text-center">
+        {t('notStartedYet')}
+      </div>
+    )
+  }
+
+  // Sort newest first
+  const sorted = [...entries].sort((a, b) => b.timestamp - a.timestamp)
+
+  return (
+    <div className="space-y-4">
+      {/* Update Progress form — agents only */}
+      {canWriteProgress && (
+        <form onSubmit={handleSubmitProgress} className="space-y-2">
+          <div className="flex items-center gap-2 mb-1">
+            <AgentAvatar name={author} size="xs" />
+            <span className="text-xs text-muted-foreground">
+              {t('postingAs')} <span className="font-medium text-foreground">{author}</span>
+            </span>
+          </div>
+          <textarea
+            value={progressText}
+            onChange={(e) => setProgressText(e.target.value)}
+            placeholder={t('updateProgressPlaceholder')}
+            rows={3}
+            className="w-full bg-surface-1 text-foreground border border-border rounded-md px-3 py-2 text-sm placeholder-muted-foreground resize-none focus:outline-none focus:ring-1 focus:ring-primary/50"
+            disabled={isSubmitting}
+          />
+          {submitError && (
+            <div className="text-xs text-red-400">{submitError}</div>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => { setProgressText(''); setSubmitError(null) }}
+              disabled={isSubmitting}
+            >
+              {t('cancel')}
+            </Button>
+            <Button
+              type="submit"
+              size="sm"
+              disabled={isSubmitting || !progressText.trim()}
+            >
+              {t('updateProgress')}
+            </Button>
+          </div>
+        </form>
+      )}
+
+      {/* Audit trail */}
+      {sorted.length > 0 && (
+        <div className="space-y-3">
+          {sorted.length > 0 && canWriteProgress && (
+            <div className="border-t border-border/50 pt-3" />
+          )}
+          {sorted.map((entry, idx) => {
+            const entryKey = idx
+            const isExp = expanded[entryKey]
+            const isLong = entry.content.length > 200
+            return (
+              <div key={entryKey} className="flex gap-3">
+                <div className="shrink-0 mt-0.5">
+                  <AgentAvatar name={entry.author} size="xs" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-xs font-medium text-foreground">{entry.author}</span>
+                    <span className="text-xs text-muted-foreground">{formatTimestamp(entry.timestamp)}</span>
+                  </div>
+                  <div className={`text-sm text-foreground/80 ${!isExp && isLong ? 'line-clamp-2' : ''}`}>
+                    {entry.content}
+                  </div>
+                  {isLong && (
+                    <button
+                      onClick={() => setExpanded(prev => ({ ...prev, [entryKey]: !prev[entryKey] }))}
+                      className="text-xs text-primary hover:text-primary/80 mt-0.5"
+                    >
+                      {isExp ? 'Show less' : 'Show more'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {sorted.length === 0 && canWriteProgress && (
+        <div className="text-sm text-muted-foreground/50 italic text-center py-2">
+          {t('notStartedYet')}
+        </div>
+      )}
     </div>
   )
 }
@@ -2252,6 +2508,7 @@ function EditTaskModal({
                   <option value="inbox">{t('colInbox')}</option>
                   <option value="assigned">{t('colAssigned')}</option>
                   <option value="in_progress">{t('colInProgress')}</option>
+                  <option value="human_review">{t('colHumanReview')}</option>
                   <option value="done">{t('colDone')}</option>
                   <option value="failed">{t('colFailed')}</option>
                 </select>

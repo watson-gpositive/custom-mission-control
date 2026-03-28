@@ -56,7 +56,8 @@ function ensureTransitionPermissions(args: {
   if (transitionError) throw new Error(transitionError)
 
   if (isHumanOperator(authUser)) {
-    if (nextStatus === 'in_progress' || nextStatus === 'done') {
+    const isAllowedHumanReviewAction = currentTask.status === 'human_review' && (nextStatus === 'in_progress' || nextStatus === 'done')
+    if ((nextStatus === 'in_progress' || nextStatus === 'done') && !isAllowedHumanReviewAction) {
       throw new Error('Human operators cannot move tasks into execution states')
     }
     if (currentTask.status === 'in_progress' && nextStatus === 'failed') {
@@ -66,6 +67,10 @@ function ensureTransitionPermissions(args: {
 
   if (nextStatus === 'in_progress' && !(nextAssignedTo && nextAssignedTo.trim())) {
     throw new Error('Assigned task owner is required before work can start')
+  }
+
+  if (currentTask.status === 'in_progress' && nextStatus === 'human_review') {
+    if (!resolution?.trim()) throw new Error('Resolution note is required for human review')
   }
 
   if (currentTask.status === 'in_progress' && nextStatus === 'done') {
@@ -153,6 +158,7 @@ export async function PUT(
       completed_at,
       tags,
       metadata,
+      progress_entry,
     } = body
 
     const normalizedStatus = normalizeTaskUpdateStatus({
@@ -176,7 +182,53 @@ export async function PUT(
 
     const previousDescriptionMentionRecipients = resolveMentionRecipients(currentTask.description || '', db, workspaceId).recipients
     const nextMetadata = metadata !== undefined ? metadata : (currentTask.metadata ? JSON.parse(currentTask.metadata) : {})
+    let metadataChanged = metadata !== undefined
     const nextStatus = normalizedStatus ?? currentTask.status
+
+    // --- Progress lifecycle rules ---
+    const currentProgress: Array<{ author: string; timestamp: number; content: string }> =
+      Array.isArray(nextMetadata.current_progress) ? nextMetadata.current_progress : []
+
+    const shouldResetProgress =
+      (currentTask.status === 'inbox' && nextStatus === 'assigned') ||
+      (currentTask.status === 'failed' && (nextStatus === 'inbox' || nextStatus === 'assigned')) ||
+      (nextStatus === 'inbox' && currentTask.status !== 'inbox')
+
+    if (shouldResetProgress) {
+      nextMetadata.current_progress = []
+      metadataChanged = true
+    }
+
+    if (currentTask.status === 'in_progress' && nextStatus === 'human_review') {
+      if (!progress_entry) {
+        return NextResponse.json({ error: 'Final progress entry is required for human review' }, { status: 400 })
+      }
+      nextMetadata.human_review_original_assignee = currentTask.assigned_to || null
+      metadataChanged = true
+    }
+
+    if (progress_entry) {
+      const canAppendProgress =
+        currentTask.status !== 'done' &&
+        currentTask.status !== 'failed' &&
+        nextStatus !== 'done' &&
+        (nextStatus === 'in_progress' || nextStatus === 'human_review' || nextStatus === 'failed')
+
+      if (!canAppendProgress) {
+        return NextResponse.json({ error: 'Progress can only be written for active tasks and final failure/human review handoff updates' }, { status: 400 })
+      }
+
+      nextMetadata.current_progress = [
+        ...(Array.isArray(nextMetadata.current_progress) ? nextMetadata.current_progress : currentProgress),
+        {
+          author: progress_entry.author,
+          timestamp: Date.now(),
+          content: progress_entry.content,
+        },
+      ]
+      metadataChanged = true
+    }
+
     const nextAssignedTo = resolveAssigneeForStatusChange({
       currentStatus: currentTask.status,
       nextStatus,
@@ -298,9 +350,9 @@ export async function PUT(
       fieldsToUpdate.push('tags = ?')
       updateParams.push(JSON.stringify(tags))
     }
-    if (metadata !== undefined) {
+    if (metadataChanged) {
       fieldsToUpdate.push('metadata = ?')
-      updateParams.push(JSON.stringify(metadata))
+      updateParams.push(JSON.stringify(nextMetadata))
     }
 
     fieldsToUpdate.push('updated_at = ?')
