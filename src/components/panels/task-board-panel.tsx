@@ -2423,12 +2423,16 @@ function EditTaskModal({
   })
   const mentionTargets = useMentionTargets()
   const agentSessions = useAgentSessions(formData.assigned_to || undefined)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setSubmitError(null)
 
     if (!formData.title.trim()) return
 
+    setIsSubmitting(true)
     try {
       const existingMeta = task.metadata || {}
       const updatedMeta = { ...existingMeta }
@@ -2451,14 +2455,16 @@ function EditTaskModal({
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
-        const errorMsg = errorData.details ? errorData.details.join(', ') : errorData.error
+        const errorData = await response.json().catch(() => ({}))
+        const errorMsg = errorData.details ? errorData.details.join(', ') : (errorData.error || `Error ${response.status}`)
         throw new Error(errorMsg)
       }
 
       onUpdated()
     } catch (error) {
-      log.error('Error updating task:', error)
+      setSubmitError(error instanceof Error ? error.message : 'Failed to update task')
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -2469,6 +2475,12 @@ function EditTaskModal({
       <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="edit-task-title" className="bg-card border border-border rounded-lg max-w-md w-full">
         <form onSubmit={handleSubmit} className="p-6">
           <h3 id="edit-task-title" className="text-xl font-bold text-foreground mb-4">{t('editTask')}</h3>
+
+          {submitError && (
+            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-md text-red-400 text-sm">
+              {submitError}
+            </div>
+          )}
 
           <div className="space-y-4">
             <div>
@@ -2597,8 +2609,8 @@ function EditTaskModal({
           </div>
 
           <div className="flex gap-3 mt-6">
-            <Button type="submit" className="flex-1">
-              {t('saveChanges')}
+            <Button type="submit" className="flex-1" disabled={isSubmitting}>
+              {isSubmitting ? 'Saving...' : t('saveChanges')}
             </Button>
             <Button type="button" variant="secondary" onClick={onClose} className="flex-1">
               {t('cancel')}
