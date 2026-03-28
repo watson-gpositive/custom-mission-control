@@ -117,7 +117,7 @@ function getLastRunAt(agent: Agent): string | null {
  * Fleet tiers:
  *   Operator  — JARVIS main (OpenClaw). Pinned hero card.
  *   Primary   — Twin agents at build.twin.so. The workhorses.
- *   External  — Perplexity Computer, etc. Static cards, no live heartbeat.
+ *   External  — External-tier agents with no local heartbeat (placeholder / informational cards).
  *   Dev Tools — Local Claude Code sub-agents. Collapsed by default.
  *   Hidden    — dispatch_twin, dogfood. Not shown.
  *
@@ -197,7 +197,7 @@ export function BridgePage() {
     [cronJobs]
   )
 
-  const totalVisible = fleetGroups.operator.length + fleetGroups.primary.length + fleetGroups.external.length + fleetGroups.devtools.length + 1 /* Perplexity Computer static */
+  const totalVisible = fleetGroups.operator.length + fleetGroups.primary.length + fleetGroups.external.length + fleetGroups.devtools.length
 
   return (
     <div className="flex h-full min-h-0">
@@ -286,8 +286,8 @@ export function BridgePage() {
                 </span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {/* Static Perplexity Computer card */}
-                <PerplexityComputerCard />
+                {/* Quick Actions — Watson shortcuts */}
+                <QuickActionsCard onNavigate={navigateToPanel} />
                 {/* Any external-tier agents from the store */}
                 {fleetGroups.external.map(agent => (
                   <AgentBriefingCard
@@ -919,73 +919,44 @@ function OperationScheduleRow({ schedule }: { schedule: OperationSchedule }) {
   )
 }
 
-// ─── Perplexity Computer Static Card ───
+// ─── Quick Actions Card ───
 
-function PerplexityComputerCard() {
-  const identity = getAgentIdentity('perplexity-computer')
+const QUICK_ACTIONS = [
+  { label: 'Chat with agents', icon: 'Bot', target: 'chat' },
+  { label: 'View task board', icon: 'ClipboardList', target: 'tasks' },
+  { label: 'Spawn agent', icon: 'Zap', target: 'spawn' },
+  { label: 'Schedule cron', icon: 'Clock', target: 'cron' },
+  { label: 'Review activity', icon: 'BarChart3', target: 'activity' },
+  { label: 'Gateway config', icon: 'Shield', target: 'gateway-config' },
+]
 
+function QuickActionsCard({ onNavigate }: { onNavigate: (target: string) => void }) {
   return (
     <div className="desk-panel border-l-4 border-l-primary transition-all duration-200 hover:shadow-lg">
       <div className="p-4 pb-0">
-        <div className="flex items-start justify-between mb-1">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <AgentIcon name={identity.icon} className="w-4 h-4 text-primary shrink-0" />
-              <h3 className="text-sm font-semibold text-foreground truncate">{identity.roleTitle}</h3>
-            </div>
-            <p className="text-2xs text-muted-foreground mt-0.5 ml-6">{identity.runtime}</p>
-          </div>
-          {/* Static indicator — no live heartbeat */}
-          <span className="text-2xs px-1.5 py-0.5 rounded bg-secondary text-muted-foreground" title="Static entry — no live heartbeat">
-            Static
-          </span>
+        <div className="flex items-center gap-2 mb-3">
+          <Zap className="w-4 h-4 text-primary" />
+          <h3 className="text-sm font-semibold text-foreground">Quick Actions</h3>
         </div>
-
-        {/* What's your job? */}
-        <p className="text-xs text-muted-foreground leading-relaxed mt-1 line-clamp-2">
-          {identity.oneLiner}
-        </p>
-      </div>
-
-      {/* Schedule */}
-      <div className="px-4 pt-3">
-        <div className="space-y-1">
-          <div className="flex items-center gap-1.5 text-xs text-foreground">
-            <Clock className="w-3 h-3 text-muted-foreground shrink-0" />
-            <span>7:15 AM CT Mon&ndash;Fri &mdash; Morning brief + Gmail drafts</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-xs text-foreground">
-            <Clock className="w-3 h-3 text-muted-foreground shrink-0" />
-            <span>2:00 PM CT Mon&ndash;Fri &mdash; Afternoon email scan + drafts</span>
-          </div>
+        <div className="grid grid-cols-2 gap-2">
+          {QUICK_ACTIONS.map(action => (
+            <Button
+              key={action.target}
+              variant="outline"
+              size="sm"
+              className="text-xs h-8 px-2 bg-transparent hover:bg-primary/5 text-foreground border-border/50 hover:border-primary/50 justify-start"
+              onClick={() => onNavigate(action.target)}
+            >
+              <AgentIcon name={action.icon} className="w-3.5 h-3.5 mr-1.5 text-muted-foreground shrink-0" />
+              {action.label}
+            </Button>
+          ))}
         </div>
       </div>
-
-      {/* Capability tags */}
-      <div className="px-4 pt-2.5 flex flex-wrap gap-1.5">
-        {identity.capabilities.map(cap => (
-          <span
-            key={cap}
-            className="text-2xs px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border/50"
-          >
-            {cap}
-          </span>
-        ))}
-      </div>
-
-      {/* Quick action — external link */}
       <div className="px-4 pt-3 pb-4">
-        <div className="flex items-center justify-between">
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-xs h-7 px-3 bg-transparent hover:bg-primary/5 text-primary border-primary/30 hover:border-primary/50"
-            onClick={() => window.open('https://www.perplexity.ai', '_blank', 'noopener')}
-          >
-            {identity.quickAction} &rarr;
-          </Button>
-          <span className="text-2xs text-muted-foreground italic">External platform</span>
-        </div>
+        <p className="text-2xs text-muted-foreground">
+          Shortcuts to common operator actions across Mission Control.
+        </p>
       </div>
     </div>
   )

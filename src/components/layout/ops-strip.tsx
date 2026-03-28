@@ -283,7 +283,7 @@ function GatewayMetric({ connection, onReconnect }: { connection: ConnectionStat
       className={`flex items-center gap-1.5 text-xs ${!isConnected ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
       title={isConnected ? 'Gateway connected' : 'Click to reconnect'}
     >
-      <span className="text-muted-foreground hidden xl:inline">GW</span>
+      <span className="text-muted-foreground hidden xl:inline">Gateway</span>
       <span className={`w-1.5 h-1.5 rounded-full ${dotClass}`} />
       <span className={`font-mono-tight font-medium ${textClass}`}>{label}</span>
     </button>

@@ -456,153 +456,22 @@ export interface OperationSchedule {
   isStatic: boolean
 }
 
+/**
+ * Static operation schedules shown in the Bridge schedules table.
+ * These are hardcoded reference entries for schedules not managed by MC cron.
+ *
+ * To add real recurring operations: manage them via the Cron tab in Mission Control.
+ * MC cron jobs appear dynamically in the schedules table alongside these static entries.
+ */
 export const OPERATION_SCHEDULES: OperationSchedule[] = [
-  // ── Perplexity Computer ──
-  {
-    time: '7:15 AM CT',
-    days: 'Mon\u2013Fri',
-    description: 'Morning brief + Gmail drafts',
-    agent: 'Perplexity Computer',
-    icon: 'Monitor',
-    source: 'external',
-    isStatic: true,
-  },
-  {
-    time: '2:00 PM CT',
-    days: 'Mon\u2013Fri',
-    description: 'Afternoon email scan + drafts',
-    agent: 'Perplexity Computer',
-    icon: 'Monitor',
-    source: 'external',
-    isStatic: true,
-  },
-
-  // ── OpenClaw Autonomous Loops ──
-  {
-    time: '9:00 AM CT',
-    days: 'Mon\u2013Fri',
-    description: 'Stale commitment watchdog',
-    agent: 'OpenClaw',
-    icon: 'Shield',
-    source: 'openclaw',
-    isStatic: true,
-  },
-  {
-    time: '9:00 AM CT',
-    days: 'Mon\u2013Fri',
-    description: 'Intelligence Council \u2014 morning session',
-    agent: 'OpenClaw',
-    icon: 'Shield',
-    source: 'openclaw',
-    isStatic: true,
-  },
-  {
-    time: '11:30 AM CT',
-    days: 'Mon\u2013Fri',
-    description: 'Ali engineering sync prep',
-    agent: 'OpenClaw',
-    icon: 'Shield',
-    source: 'openclaw',
-    isStatic: true,
-  },
-  {
-    time: '6:00 PM CT',
-    days: 'Mon\u2013Fri',
-    description: 'End-of-day wrap',
-    agent: 'OpenClaw',
-    icon: 'Shield',
-    source: 'openclaw',
-    isStatic: true,
-  },
-  {
-    time: '5:00 PM CT',
-    days: 'Mon\u2013Fri',
-    description: 'Intelligence Council \u2014 evening session',
-    agent: 'OpenClaw',
-    icon: 'Shield',
-    source: 'openclaw',
-    isStatic: true,
-  },
-  {
-    time: 'Every 15 min',
-    days: 'Always',
-    description: 'Pre-meeting intelligence brief',
-    agent: 'OpenClaw',
-    icon: 'Shield',
-    source: 'openclaw',
-    isStatic: true,
-  },
-
-  // ── Twin Agents ──
-  {
-    time: '5:30 PM CT',
-    days: 'Mon\u2013Fri',
-    description: 'Daily engineering summary from ClickUp doc',
-    agent: 'Engineering Summary',
-    icon: 'BarChart3',
-    source: 'twin',
-    isStatic: false,
-  },
-
-  // ── OpenClaw Always-On ──
+  // OpenClaw gateway-level heartbeat (always running, managed by the gateway itself)
   {
     time: 'Every 30 min',
     days: 'Always',
-    description: 'OpenClaw heartbeat',
+    description: 'OpenClaw gateway heartbeat',
     agent: 'OpenClaw',
     icon: 'HeartPulse',
     source: 'openclaw',
-    isStatic: true,
-  },
-
-  // ── Airweave ──
-  {
-    time: 'Every 5 min',
-    days: 'Daily',
-    description: 'Airweave ClickUp + GitHub sync',
-    agent: 'Airweave',
-    icon: 'Brain',
-    source: 'external',
-    isStatic: true,
-  },
-
-  // ── jarvisv2 Crons ──
-  {
-    time: 'Every 15 min',
-    days: 'Daily',
-    description: 'Email intelligence sync',
-    agent: 'jarvisv2',
-    icon: 'Mail',
-    source: 'jarvisv2',
-    isStatic: true,
-  },
-  {
-    time: 'Every 1 min',
-    days: 'Always',
-    description: 'Due actions executor',
-    agent: 'jarvisv2',
-    icon: 'Zap',
-    source: 'jarvisv2',
-    isStatic: true,
-  },
-  {
-    time: 'On webhook',
-    days: 'Always',
-    description: 'Zoom \u2192 meeting notes \u2192 ClickUp',
-    agent: 'jarvisv2 + Twin',
-    icon: 'Webhook',
-    source: 'jarvisv2',
-    isStatic: true,
-  },
-
-  // ── Granola ──
-  {
-    time: 'During meetings',
-    days: 'As scheduled',
-    description: 'Live meeting transcription',
-    agent: 'Granola',
-    icon: 'Mic',
-    source: 'external',
     isStatic: true,
   },
 ]
