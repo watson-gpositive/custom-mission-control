@@ -536,8 +536,6 @@ export function TaskBoardPanel() {
   // Poll as SSE fallback — pauses when SSE is delivering events
   useSmartPoll(fetchData, 30000, { pauseWhenSseConnected: true })
 
-  const taskBoardIsReadOnlyWorkflow = Boolean(currentUser)
-
   // Group tasks by canonical workflow status
   const tasksByStatus = statusColumns.reduce((acc, column) => {
     acc[column.key] = tasks.filter(task => task.status === column.key)
@@ -574,12 +572,6 @@ export function TaskBoardPanel() {
     e.preventDefault()
     dragCounter.current = 0
     e.currentTarget.classList.remove('drag-over')
-
-    if (taskBoardIsReadOnlyWorkflow) {
-      setDraggedTask(null)
-      setError('Use Reassign or Send back to Backlog from task details. Forward workflow moves are agent-only.')
-      return
-    }
 
     if (!draggedTask || draggedTask.status === newStatus) {
       setDraggedTask(null)
@@ -930,7 +922,7 @@ export function TaskBoardPanel() {
               {tasksByStatus[column.key]?.map(task => (
                 <div
                   key={task.id}
-                  draggable={!taskBoardIsReadOnlyWorkflow}
+                  draggable={true}
                   role="button"
                   tabIndex={0}
                   aria-label={`${task.title}, ${task.priority} priority, ${task.status}`}
